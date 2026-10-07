@@ -4,38 +4,312 @@ This document records proof for each Social Media Studio capstone requirement.
 
 ## 1. Post Ingestion
 
-Pending — Phase 2.
+### Markdown ingestion
+
+Command:
+
+```bash
+curl -i -X POST http://localhost:3000/posts \
+-H "Content-Type: application/json" \
+-d '{"source_type":"markdown","title":"Why Background Jobs Matter","content":"# Why Background Jobs Matter\n\nSlow work should not keep API users waiting."}'
+```
+
+Observed result:
+
+```text
+HTTP/1.1 201 Created
+```
+
+```json
+{
+  "id": 2,
+  "source_type": "markdown",
+  "source_url": null,
+  "title": "Why Background Jobs Matter",
+  "content": "# Why Background Jobs Matter\n\nSlow work should not keep API users waiting."
+}
+```
+
+The stored post was retrieved successfully with:
+
+```bash
+curl -i http://localhost:3000/posts/2
+```
+
+and returned:
+
+```text
+HTTP/1.1 200 OK
+```
+
+### URL ingestion
+
+Command:
+
+```bash
+curl -i -X POST http://localhost:3000/posts \
+-H "Content-Type: application/json" \
+-d '{"source_type":"url","source_url":"https://example.com"}'
+```
+
+Observed result:
+
+```text
+HTTP/1.1 201 Created
+```
+
+```json
+{
+  "id": 3,
+  "source_type": "url",
+  "source_url": "https://example.com/",
+  "title": "Example Domain",
+  "content": "This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes."
+}
+```
+
+Retrieving the stored record:
+
+```bash
+curl -i http://localhost:3000/posts/3
+```
+
+returned:
+
+```text
+HTTP/1.1 200 OK
+```
+
+Invalid URL protocols are rejected:
+
+```bash
+curl -i -X POST http://localhost:3000/posts \
+-H "Content-Type: application/json" \
+-d '{"source_type":"url","source_url":"ftp://example.com/article"}'
+```
+
+Result:
+
+```text
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{
+  "error": "Invalid source_url: only http and https URLs are allowed"
+}
+```
+
+Generation receives only the stored post ID and loads the source post from SQLite. The client does not resend the source content during variant generation.
+
+---
 
 ## 2. Constraint Profiles
 
-Pending — Phase 2.
+The application currently defines constraint profiles for:
 
-## 3. Review Workflow
+- X-style
+- LinkedIn-style
+- Mastodon
+
+Constraints include:
+
+- maximum character length
+- maximum hashtag count
+- deterministic tone rules
+- forbidden promotional terms
+- maximum sentence count where applicable
+
+Validation is performed in application code before a generated variant is stored.
+
+### Valid variant proof
+
+Command:
+
+```bash
+npm run variant:test
+```
+
+Observed valid X-style result:
+
+```json
+{
+  "valid": true,
+  "errors": [],
+  "metrics": {
+    "characters": 84,
+    "hashtags": 2
+  }
+}
+```
+
+### Invalid variant proof
+
+The same test deliberately validates this rule-breaking variant:
+
+```text
+This is the best ever solution. You won't believe how amazing this is. It changes everything. #Backend #APIs #Development
+```
+
+Observed result:
+
+```json
+{
+  "valid": false,
+  "errors": [
+    "hashtag rule violated: maximum 2 hashtags, received 3",
+    "tone rule violated: maximum 2 sentences, received 4",
+    "tone rule violated: forbidden term \"best ever\"",
+    "tone rule violated: forbidden term \"you won't believe\""
+  ],
+  "metrics": {
+    "characters": 121,
+    "hashtags": 3
+  }
+}
+```
+
+### Proof that invalid content is blocked before storage
+
+Command:
+
+```bash
+npm run constraint:test
+```
+
+Observed result:
+
+```text
+BLOCKED BEFORE STORAGE
+
+DATABASE CHECK
+{ before: 2, after: 2, unchanged: true }
+```
+
+The invalid variant was rejected and the variants table remained unchanged.
+
+---
+
+## 3. Variant Generation
+
+Command:
+
+```bash
+curl -i -X POST http://localhost:3000/posts/2/variants
+```
+
+Observed result:
+
+```text
+HTTP/1.1 201 Created
+```
+
+Two different variants were generated from the same stored post:
+
+```text
+platform: x
+status: draft
+validation_result.valid: true
+```
+
+and:
+
+```text
+platform: linkedin
+status: draft
+validation_result.valid: true
+```
+
+The X-style variant contained:
+
+```text
+Why Background Jobs Matter: Why Background Jobs Matter Slow work should not keep API users waiting. #Backend #Tech
+```
+
+The LinkedIn-style variant contained:
+
+```text
+Why Background Jobs Matter
+
+Why Background Jobs Matter Slow work should not keep API users waiting.
+
+A useful reminder for engineering teams: reliable systems should remain predictable even when work is retried or interrupted.
+
+#SoftwareEngineering #BackendDevelopment #Reliability
+```
+
+Stored variants can be retrieved with:
+
+```bash
+curl -i http://localhost:3000/posts/2/variants
+```
+
+which returned:
+
+```text
+HTTP/1.1 200 OK
+```
+
+A request for variants from a nonexistent post:
+
+```bash
+curl -i -X POST http://localhost:3000/posts/99999/variants
+```
+
+returned:
+
+```text
+HTTP/1.1 404 Not Found
+```
+
+```json
+{
+  "ok": false,
+  "status": 404,
+  "error": "Post not found"
+}
+```
+
+---
+
+## 4. Review Workflow
 
 Pending — Phase 3.
 
-## 4. Adapter Layer
+---
+
+## 5. Adapter Layer
 
 Pending — Phase 4.
 
-## 5. Idempotent Publishing
+---
+
+## 6. Idempotent Publishing
 
 Pending — Phase 4.
 
-## 6. Durable Scheduling
+---
+
+## 7. Durable Scheduling
 
 Pending — Phase 5.
 
-## 7. Publish History
+---
+
+## 8. Publish History
 
 Pending — Phase 5.
 
-## 8. Secrets
+---
+
+## 9. Secrets
 
 `.env` is excluded from Git through `.gitignore`.
 
 `.env.example` contains only safe placeholder values.
 
-## 9. README / Reproducibility
+---
+
+## 10. README / Reproducibility
 
 Pending — finalized during Phase 5.

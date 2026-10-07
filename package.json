@@ -1,0 +1,28 @@
+{
+  "name": "flyrank-capstone-social-studio",
+  "version": "1.0.0",
+  "description": "FlyRank Backend Track Capstone.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node src/app.js",
+    "db:test": "node tests/db.test.js",
+    "variant:test": "node tests/variant-validator.test.js",
+    "constraint:test": "node tests/constraint-gate.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kimi-G/flyrank-capstone-social-studio.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Kimi-G/flyrank-capstone-social-studio/issues"
+  },
+  "homepage": "https://github.com/Kimi-G/flyrank-capstone-social-studio#readme",
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "express": "^5.2.1"
+  }
+}
