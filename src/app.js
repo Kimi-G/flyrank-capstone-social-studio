@@ -3,6 +3,12 @@ const express = require("express");
 const postsRouter =
   require("./routes/posts.routes");
 
+const variantsRouter =
+  require("./routes/variants.routes");  
+
+  const schedulesRouter =
+  require("./routes/schedules.routes");
+
 // Importing the database initializes
 // the schema before requests arrive.
 require("./db/db");
@@ -23,6 +29,16 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/posts", postsRouter);
+
+app.use(
+  "/variants",
+  variantsRouter
+);
+
+app.use(
+  "/schedules",
+  schedulesRouter
+);
 
 app.use((req, res) => {
   return res.status(404).json({

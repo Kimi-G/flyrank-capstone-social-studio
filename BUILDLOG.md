@@ -25,3 +25,17 @@ Constraint enforcement is implemented in application code. The validator checks 
 A deliberate invalid X-style variant was rejected for multiple named violations. A database count before and after the validation test confirmed that the invalid variant was blocked before storage.
 
 AI-generated suggestions were not accepted blindly. Errors were corrected using runtime output, direct SQLite queries, and repeated API tests.
+
+## Phase 3 — Review Workflow
+
+AI was used to help structure the review service, review endpoints, scheduling gate, and edge-case tests.
+
+The review workflow now supports editing, approving, and rejecting variants. Edited content is validated again before being saved.
+
+Only variants with `approved` status can be scheduled. A rejected variant was tested and returned `409 Conflict`, while an approved variant successfully created a schedule.
+
+Scheduling also creates a deterministic idempotency key based on the variant and scheduled time. Repeating the same scheduling request reused the existing schedule instead of creating a duplicate.
+
+During review of the workflow, I identified an additional safety issue: an approved variant could already have a schedule and then be edited. Without extra handling, the modified text could eventually be published even though the edit had never been approved.
+
+The implementation was changed so editing an approved variant resets it to `draft` and removes any pending scheduled job for that variant. Testing confirmed that the existing schedule disappeared and the edited draft could not be scheduled again until it was reapproved.

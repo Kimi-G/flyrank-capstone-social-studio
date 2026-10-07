@@ -274,7 +274,160 @@ HTTP/1.1 404 Not Found
 
 ## 4. Review Workflow
 
-Pending — Phase 3.
+Variants support editing, approval, and rejection.
+
+### Editing a draft variant
+
+Command:
+
+```bash
+curl -i -X PATCH http://localhost:3000/variants/1 \
+-H "Content-Type: application/json" \
+-d '{"content":"Background jobs keep APIs responsive while workers handle slow tasks safely. #Backend #Reliability"}'
+```
+
+Observed result:
+
+```text
+HTTP/1.1 200 OK
+```
+
+The edited variant remained:
+
+```text
+status: draft
+validation_result.valid: true
+```
+
+Edited content is revalidated against the platform constraint profile before it is accepted.
+
+### Approval
+
+Command:
+
+```bash
+curl -i -X POST http://localhost:3000/variants/1/approve
+```
+
+Observed result:
+
+```text
+HTTP/1.1 200 OK
+status: approved
+```
+
+### Rejection
+
+Command:
+
+```bash
+curl -i -X POST http://localhost:3000/variants/2/reject
+```
+
+Observed result:
+
+```text
+HTTP/1.1 200 OK
+status: rejected
+```
+
+### Unapproved variants cannot be scheduled
+
+Variant 2 was rejected and then used in a scheduling attempt:
+
+```bash
+curl -i -X POST http://localhost:3000/variants/2/schedule \
+-H "Content-Type: application/json" \
+-d '{"scheduled_at":"2026-12-01T18:00:00.000Z"}'
+```
+
+Observed result:
+
+```text
+HTTP/1.1 409 Conflict
+```
+
+```json
+{
+  "ok": false,
+  "status": 409,
+  "error": "Only approved variants can be scheduled; current status is rejected"
+}
+```
+
+### Approved variants can be scheduled
+
+Variant 1 was approved and scheduled:
+
+```bash
+curl -i -X POST http://localhost:3000/variants/1/schedule \
+-H "Content-Type: application/json" \
+-d '{"scheduled_at":"2026-12-01T18:00:00.000Z"}'
+```
+
+Observed result:
+
+```text
+HTTP/1.1 201 Created
+```
+
+The schedule contained a deterministic idempotency key:
+
+```text
+variant:1:slot:2026-12-01T18:00:00.000Z
+```
+
+Repeating the identical scheduling request returned:
+
+```text
+HTTP/1.1 200 OK
+reused: true
+```
+
+and reused the same schedule rather than creating another row.
+
+### Editing approved content invalidates approval
+
+An approved and scheduled variant was edited.
+
+Observed response:
+
+```json
+{
+  "ok": true,
+  "approval_reset": true
+}
+```
+
+The variant status returned to:
+
+```text
+draft
+```
+
+The existing scheduled job was removed:
+
+```json
+{
+  "schedules": []
+}
+```
+
+Attempting to schedule the edited variant without approving it again returned:
+
+```text
+HTTP/1.1 409 Conflict
+```
+
+```json
+{
+  "ok": false,
+  "status": 409,
+  "error": "Only approved variants can be scheduled; current status is draft"
+}
+```
+
+This prevents previously approved content from being edited and later published without a new human approval.
 
 ---
 
