@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 
 const postsRouter =
@@ -8,6 +10,9 @@ const variantsRouter =
 
   const schedulesRouter =
   require("./routes/schedules.routes");
+
+  const publishRouter =
+  require("./routes/publish.routes");
 
 // Importing the database initializes
 // the schema before requests arrive.
@@ -38,6 +43,11 @@ app.use(
 app.use(
   "/schedules",
   schedulesRouter
+);
+
+app.use(
+  "/publish",
+  publishRouter
 );
 
 app.use((req, res) => {

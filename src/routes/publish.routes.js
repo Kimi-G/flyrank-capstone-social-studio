@@ -2,13 +2,8 @@ const express =
   require("express");
 
 const {
-  listSchedules
-} = require(
-  "../controllers/schedules.controller"
-);
-
-const {
-  publish
+  history,
+  mockPreview
 } = require(
   "../controllers/publish.controller"
 );
@@ -17,13 +12,13 @@ const router =
   express.Router();
 
 router.get(
-  "/",
-  listSchedules
+  "/history",
+  history
 );
 
-router.post(
-  "/:id/publish",
-  publish
+router.get(
+  "/mock-publications",
+  mockPreview
 );
 
 module.exports = router;

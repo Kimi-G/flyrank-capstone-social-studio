@@ -433,13 +433,151 @@ This prevents previously approved content from being edited and later published 
 
 ## 5. Adapter Layer
 
-Pending — Phase 4.
+Publishing uses one common `SocialPublisher` interface.
+
+Implemented adapters:
+
+- `MastodonPublisher` — real Mastodon publishing
+- `MockXPublisher` — local mock publisher
+- `MockLinkedInPublisher` — local mock publisher
+
+All adapters implement the same operation:
+
+```javascript
+publish({
+  content,
+  idempotencyKey
+})
+```
+
+The publishing service depends on the publisher interface/factory rather than platform-specific API code.
+
+### Mock adapter proof
+
+Command:
+
+```bash
+npm run publisher:test
+```
+
+The first `mock_x` publish returned:
+
+```text
+duplicate: false
+```
+
+Repeating the same publish returned the same external ID with:
+
+```text
+duplicate: true
+```
+
+Database count:
+
+```text
+count: 1
+```
+
+The same publisher interface also successfully invoked `mock_linkedin`.
+
+### Configuration-only adapter swap
+
+The Mastodon platform was temporarily configured to use the X mock adapter:
+
+```bash
+PUBLISHER_ADAPTER_MASTODON=mock_x npm start
+```
+
+No publishing, scheduling, review, or campaign business logic was changed.
+
+A Mastodon-platform variant was then published.
+
+Observed publish result:
+
+```text
+platform: mastodon
+adapter: mock_x
+result: success
+```
+
+The resulting external URL used the mock publisher:
+
+```text
+mock://x/...
+```
+
+Publish history also recorded:
+
+```text
+platform: mastodon
+adapter: mock_x
+```
+
+This proves that adapter selection is configuration-driven and that changing the destination does not require changing business logic.
 
 ---
 
 ## 6. Idempotent Publishing
 
-Pending — Phase 4.
+### Mock publisher retry
+
+A scheduled X-style variant was published twice.
+
+First attempt:
+
+```text
+adapter: mock_x
+attempt_number: 1
+result: success
+```
+
+Second attempt:
+
+```text
+adapter: mock_x
+attempt_number: 2
+result: duplicate_skipped
+```
+
+Both attempts returned the same external ID.
+
+Only one matching row existed in `mock_publications`.
+
+### Real Mastodon publishing
+
+A Mastodon variant was generated from a stored post, validated, approved, and scheduled.
+
+The first publish returned:
+
+```text
+adapter: mastodon
+attempt_number: 1
+result: success
+```
+
+The response included a real Mastodon status ID and a live `https://mastodon.social/...` status URL.
+
+The live status was opened manually in the browser and confirmed to exist on the owned Mastodon account.
+
+Repeating the exact publish call returned:
+
+```text
+adapter: mastodon
+attempt_number: 2
+result: duplicate_skipped
+reused: true
+```
+
+Both publish attempts referenced the same Mastodon status ID and the same live status URL.
+
+The URL stored in the database was also checked locally:
+
+```text
+hasUrl: true
+endsWithStatusId: true
+```
+
+Therefore, two publish attempts produced exactly one external Mastodon post.
 
 ---
 
@@ -451,8 +589,41 @@ Pending — Phase 5.
 
 ## 8. Publish History
 
-Pending — Phase 5.
+Every publish attempt is stored in the `publish_attempts` table and exposed through:
 
+```bash
+curl http://localhost:3000/publish/history
+```
+
+History records include:
+
+- schedule ID
+- variant ID
+- platform
+- adapter
+- attempt number
+- result
+- external ID
+- external URL
+- error, when present
+- start and finish timestamps
+
+Example idempotent Mastodon history:
+
+```text
+attempt 1 → success
+attempt 2 → duplicate_skipped
+same external ID
+same external URL
+```
+
+The mock adapter swap was also visible in history:
+
+```text
+platform: mastodon
+adapter: mock_x
+result: success
+```
 ---
 
 ## 9. Secrets

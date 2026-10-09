@@ -10,15 +10,32 @@ function countHashtags(content) {
 }
 
 function countSentences(content) {
+  const withoutHashtags = content
+    .replace(
+      /(^|\s)#[A-Za-z0-9_]+/g,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!withoutHashtags) {
+    return 0;
+  }
+
   const matches =
-    content.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+    withoutHashtags.match(
+      /[^.!?]+[.!?]+|[^.!?]+$/g
+    );
 
   if (!matches) {
     return 0;
   }
 
   return matches
-    .map((sentence) => sentence.trim())
+    .map(
+      (sentence) =>
+        sentence.trim()
+    )
     .filter(Boolean)
     .length;
 }

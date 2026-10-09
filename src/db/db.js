@@ -80,6 +80,44 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_schedule_slots_due
   ON schedule_slots(status, scheduled_at);  
 
+CREATE TABLE IF NOT EXISTS mock_publications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  adapter TEXT NOT NULL,
+  content TEXT NOT NULL,
+  external_id TEXT NOT NULL,
+  external_url TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS publish_attempts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id INTEGER NOT NULL,
+  adapter TEXT NOT NULL,
+  attempt_number INTEGER NOT NULL,
+
+  result TEXT NOT NULL
+    CHECK (
+      result IN (
+        'started',
+        'success',
+        'failed',
+        'duplicate_skipped'
+      )
+    ),
+
+  external_id TEXT,
+  external_url TEXT,
+  error TEXT,
+
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+
+  FOREIGN KEY (schedule_id)
+    REFERENCES schedule_slots(id)
+    ON DELETE CASCADE
+);
+
 `);
 
 module.exports = db;

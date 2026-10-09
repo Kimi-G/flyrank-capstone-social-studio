@@ -39,3 +39,25 @@ Scheduling also creates a deterministic idempotency key based on the variant and
 During review of the workflow, I identified an additional safety issue: an approved variant could already have a schedule and then be edited. Without extra handling, the modified text could eventually be published even though the edit had never been approved.
 
 The implementation was changed so editing an approved variant resets it to `draft` and removes any pending scheduled job for that variant. Testing confirmed that the existing schedule disappeared and the edited draft could not be scheduled again until it was reapproved.
+
+## Phase 4 — Publisher Adapters and Idempotent Publishing
+
+AI was used to help design the publisher adapter interface, mock adapters, publisher factory, publish service, Mastodon adapter, publish history, and idempotency tests.
+
+The application now has one common `SocialPublisher` interface with `MockXPublisher`, `MockLinkedInPublisher`, and a real `MastodonPublisher`.
+
+The mock adapters were tested first. Repeating the same mock publish returned the same external identifier and created only one mock publication.
+
+A shared publish service was then added. It records every publish attempt while protecting the external side effect from duplication.
+
+Mastodon authentication was configured using a token stored only in the local `.env`. An initial authentication test failed because `MASTODON_BASE_URL` still contained a placeholder value. After changing it to `https://mastodon.social`, authentication succeeded.
+
+The real Mastodon adapter was added without changing the shared publishing business logic. A validated Mastodon variant was approved, scheduled, and successfully published to the real account. The returned live status URL was opened in a browser and verified.
+
+Repeating the publish request recorded a second attempt as `duplicate_skipped` while preserving the same external status ID and URL.
+
+During variant generation, the sentence validator initially counted trailing hashtags as an additional sentence. The validator was corrected to remove hashtag tokens before sentence counting rather than weakening the platform constraint.
+
+Finally, adapter swapping was tested by temporarily setting `PUBLISHER_ADAPTER_MASTODON=mock_x`. A Mastodon-platform campaign then published through the X mock adapter without any changes to review, scheduling, or publishing business logic.
+
+The implementation was validated using API responses, direct database checks, mock publication counts, publish history, and a real Mastodon status.

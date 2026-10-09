@@ -8,7 +8,9 @@
     "dev": "node src/app.js",
     "db:test": "node tests/db.test.js",
     "variant:test": "node tests/variant-validator.test.js",
-    "constraint:test": "node tests/constraint-gate.test.js"
+    "constraint:test": "node tests/constraint-gate.test.js",
+    "publisher:test": "node tests/publisher-adapter.test.js",
+    "mastodon:auth": "node tests/mastodon-auth.test.js"
   },
   "repository": {
     "type": "git",
@@ -23,6 +25,7 @@
   "homepage": "https://github.com/Kimi-G/flyrank-capstone-social-studio#readme",
   "dependencies": {
     "cheerio": "^1.2.0",
+    "dotenv": "^18.0.6",
     "express": "^5.2.1"
   }
 }

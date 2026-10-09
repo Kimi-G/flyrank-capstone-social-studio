@@ -40,7 +40,10 @@ function buildXVariant(post) {
     cleanText(post.content);
 
   const summary =
-    truncateText(sourceContent, 155);
+    truncateText(
+      sourceContent,
+      155
+    );
 
   return `${title}: ${summary} #Backend #Tech`;
 }
@@ -53,7 +56,10 @@ function buildLinkedInVariant(post) {
     cleanText(post.content);
 
   const summary =
-    truncateText(sourceContent, 700);
+    truncateText(
+      sourceContent,
+      700
+    );
 
   return `${title}
 
@@ -62,6 +68,28 @@ ${summary}
 A useful reminder for engineering teams: reliable systems should remain predictable even when work is retried or interrupted.
 
 #SoftwareEngineering #BackendDevelopment #Reliability`;
+}
+
+function buildMastodonVariant(post) {
+  const title =
+    cleanText(post.title);
+
+  const sourceContent =
+    cleanText(post.content);
+
+  const summary =
+    truncateText(
+      sourceContent,
+      250
+    );
+
+  return `${title}
+
+${summary}
+
+Reliable publishing should remain safe under retries and restarts.
+
+#Backend #Reliability`;
 }
 
 function saveVariant({
@@ -97,7 +125,9 @@ function saveVariant({
     );
 
   return getVariantById(
-    Number(result.lastInsertRowid)
+    Number(
+      result.lastInsertRowid
+    )
   );
 }
 
@@ -124,6 +154,7 @@ function getVariantById(id) {
 
   return {
     ...variant,
+
     validation_result:
       variant.validation_result
         ? JSON.parse(
@@ -133,7 +164,9 @@ function getVariantById(id) {
   };
 }
 
-function getVariantsByPostId(postId) {
+function getVariantsByPostId(
+  postId
+) {
   const variants = db
     .prepare(`
       SELECT
@@ -151,18 +184,23 @@ function getVariantsByPostId(postId) {
     `)
     .all(postId);
 
-  return variants.map((variant) => ({
-    ...variant,
-    validation_result:
-      variant.validation_result
-        ? JSON.parse(
-            variant.validation_result
-          )
-        : null
-  }));
+  return variants.map(
+    (variant) => ({
+      ...variant,
+
+      validation_result:
+        variant.validation_result
+          ? JSON.parse(
+              variant.validation_result
+            )
+          : null
+    })
+  );
 }
 
-function generateVariantsForPost(postId) {
+function generateVariantsForPost(
+  postId
+) {
   const post =
     getPostById(postId);
 
@@ -180,16 +218,26 @@ function generateVariantsForPost(postId) {
       content:
         buildXVariant(post)
     },
+
     {
       platform: "linkedin",
       content:
         buildLinkedInVariant(post)
+    },
+
+    {
+      platform: "mastodon",
+      content:
+        buildMastodonVariant(post)
     }
   ];
 
   const invalidVariants = [];
 
-  for (const candidate of candidates) {
+  for (
+    const candidate
+    of candidates
+  ) {
     const validation =
       validateVariant(
         candidate.platform,
@@ -200,45 +248,56 @@ function generateVariantsForPost(postId) {
       invalidVariants.push({
         platform:
           candidate.platform,
+
         errors:
           validation.errors
       });
     }
   }
 
-  if (invalidVariants.length > 0) {
+  if (
+    invalidVariants.length > 0
+  ) {
     return {
       ok: false,
       status: 422,
+
       error:
         "Generated variant failed constraint validation",
+
       invalid_variants:
         invalidVariants
     };
   }
 
   const savedVariants =
-    candidates.map((candidate) => {
-      const validation =
-        validateVariant(
-          candidate.platform,
-          candidate.content
-        );
+    candidates.map(
+      (candidate) => {
+        const validation =
+          validateVariant(
+            candidate.platform,
+            candidate.content
+          );
 
-      return saveVariant({
-        postId: post.id,
-        platform:
-          candidate.platform,
-        content:
-          candidate.content,
-        validation
-      });
-    });
+        return saveVariant({
+          postId: post.id,
+
+          platform:
+            candidate.platform,
+
+          content:
+            candidate.content,
+
+          validation
+        });
+      }
+    );
 
   return {
     ok: true,
     post_id: post.id,
-    variants: savedVariants
+    variants:
+      savedVariants
   };
 }
 
