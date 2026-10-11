@@ -131,6 +131,32 @@ function createStartedAttempt({
   );
 }
 
+function closeInterruptedAttempts(
+  scheduleId
+) {
+  const finishedAt =
+    new Date().toISOString();
+
+  db.prepare(`
+    UPDATE publish_attempts
+    SET
+      result = 'failed',
+      error = COALESCE(
+        error,
+        'Worker interrupted before attempt completed'
+      ),
+      finished_at = COALESCE(
+        finished_at,
+        ?
+      )
+    WHERE schedule_id = ?
+      AND result = 'started'
+  `).run(
+    finishedAt,
+    scheduleId
+  );
+}
+
 function recordDuplicateRetry({
   schedule,
   existingAttempt
@@ -234,7 +260,17 @@ async function publishSchedule(
         `Only approved variants can be published; current status is ${schedule.variant_status}`
     };
   }
-
+  // A processing schedule with an unfinished
+// attempt means the previous worker was
+// interrupted before completing local state.
+if (
+  schedule.schedule_status ===
+  "processing"
+) {
+  closeInterruptedAttempts(
+    schedule.id
+  );
+}
   let adapterName;
 
   try {
@@ -277,18 +313,38 @@ async function publishSchedule(
       );
 
     const publication =
-      await publisher.publish({
-        content:
-          schedule.content,
+  await publisher.publish({
+    content:
+      schedule.content,
 
-        idempotencyKey:
-          schedule.idempotency_key
-      });
+    idempotencyKey:
+      schedule.idempotency_key
+  });
 
-    const attemptResult =
-      publication.duplicate
-        ? "duplicate_skipped"
-        : "success";
+// Test-only fault injection.
+//
+// This simulates the dangerous crash window:
+// the external publisher has accepted the post,
+// but the local success transaction has not yet
+// been committed.
+//
+// Restricted to mock adapters so a test can never
+// intentionally crash after a real public publish.
+if (
+  process.env
+    .SIMULATE_CRASH_AFTER_PUBLISH ===
+    "true" &&
+  adapterName.startsWith("mock_")
+) {
+  console.error(
+    `[publish] Simulating worker crash after external publish for schedule ${schedule.id}`
+  );
+
+  process.exit(86);
+}
+
+const attemptResult =
+  "success";
 
     const finishedAt =
       new Date().toISOString();

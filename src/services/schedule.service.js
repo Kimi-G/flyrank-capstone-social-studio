@@ -71,6 +71,30 @@ function getSchedules() {
     }));
 }
 
+function getRecoverableSchedules() {
+  return db
+    .prepare(`
+      SELECT
+        id,
+        variant_id,
+        scheduled_at,
+        status,
+        idempotency_key,
+        created_at,
+        published_at
+      FROM schedule_slots
+      WHERE status IN (
+        'scheduled',
+        'processing'
+      )
+      ORDER BY scheduled_at
+    `)
+    .all()
+    .map((row) => ({
+      ...row
+    }));
+}
+
 function createSchedule({
   variantId,
   scheduledAt
@@ -182,5 +206,6 @@ function createSchedule({
 module.exports = {
   createSchedule,
   getScheduleById,
-  getSchedules
+  getSchedules,
+  getRecoverableSchedules
 };

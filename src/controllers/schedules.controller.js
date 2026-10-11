@@ -5,7 +5,14 @@ const {
   "../services/schedule.service"
 );
 
-function scheduleVariant(req, res) {
+const {
+  createPublishQueue,
+  enqueueSchedule
+} = require(
+  "../jobs/publishQueue"
+);
+
+async function scheduleVariant(req, res) {
   const variantId =
     Number(req.params.id);
 
@@ -45,13 +52,48 @@ function scheduleVariant(req, res) {
       .json(result);
   }
 
-  return res
-    .status(
-      result.reused
-        ? 200
-        : 201
-    )
-    .json(result);
+  const {
+    queue,
+    connection
+  } = createPublishQueue();
+
+  try {
+    const job =
+      await enqueueSchedule(
+        queue,
+        result.schedule
+      );
+
+    return res
+      .status(
+        result.reused
+          ? 200
+          : 201
+      )
+      .json({
+        ...result,
+        queue: {
+          job_id: job.id,
+          status: "queued"
+        }
+      });
+  } catch (error) {
+    console.error(
+      "[schedule] Queue error:",
+      error.message
+    );
+
+    return res.status(503).json({
+      ok: false,
+      status: 503,
+      error:
+        "Schedule was stored but could not be queued for publishing",
+      schedule: result.schedule
+    });
+  } finally {
+    await queue.close();
+    await connection.quit();
+  }
 }
 
 function listSchedules(req, res) {

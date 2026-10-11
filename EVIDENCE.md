@@ -2,6 +2,8 @@
 
 This document records proof for each Social Media Studio capstone requirement.
 
+---
+
 ## 1. Post Ingestion
 
 ### Markdown ingestion
@@ -145,7 +147,7 @@ Observed valid X-style result:
 
 ### Invalid variant proof
 
-The same test deliberately validates this rule-breaking variant:
+The test deliberately validates this rule-breaking variant:
 
 ```text
 This is the best ever solution. You won't believe how amazing this is. It changes everything. #Backend #APIs #Development
@@ -158,7 +160,7 @@ Observed result:
   "valid": false,
   "errors": [
     "hashtag rule violated: maximum 2 hashtags, received 3",
-    "tone rule violated: maximum 2 sentences, received 4",
+    "tone rule violated: maximum 2 sentences, received 3",
     "tone rule violated: forbidden term \"best ever\"",
     "tone rule violated: forbidden term \"you won't believe\""
   ],
@@ -182,73 +184,49 @@ Observed result:
 ```text
 BLOCKED BEFORE STORAGE
 
+Broken rules:
+- hashtag rule violated: maximum 2 hashtags, received 3
+- tone rule violated: maximum 2 sentences, received 3
+- tone rule violated: forbidden term "best ever"
+- tone rule violated: forbidden term "you won't believe"
+
 DATABASE CHECK
-{ before: 2, after: 2, unchanged: true }
+{ before: 14, after: 14, unchanged: true }
 ```
 
-The invalid variant was rejected and the variants table remained unchanged.
+The invalid variant was rejected before storage and the variants table remained unchanged.
 
 ---
 
 ## 3. Variant Generation
 
+Variant generation reads a stored post and creates platform-specific variants.
+
 Command:
 
 ```bash
-curl -i -X POST http://localhost:3000/posts/2/variants
+curl -i -X POST http://localhost:3000/posts/4/variants
 ```
 
-Observed result:
+The current configuration generates variants for:
 
 ```text
-HTTP/1.1 201 Created
+x
+linkedin
+mastodon
 ```
 
-Two different variants were generated from the same stored post:
+A verified generation run created:
 
 ```text
-platform: x
-status: draft
-validation_result.valid: true
+variant 9  → x        → draft
+variant 10 → linkedin → draft
+variant 11 → mastodon → draft
 ```
 
-and:
+Each generated variant passed its platform constraint profile before being stored.
 
-```text
-platform: linkedin
-status: draft
-validation_result.valid: true
-```
-
-The X-style variant contained:
-
-```text
-Why Background Jobs Matter: Why Background Jobs Matter Slow work should not keep API users waiting. #Backend #Tech
-```
-
-The LinkedIn-style variant contained:
-
-```text
-Why Background Jobs Matter
-
-Why Background Jobs Matter Slow work should not keep API users waiting.
-
-A useful reminder for engineering teams: reliable systems should remain predictable even when work is retried or interrupted.
-
-#SoftwareEngineering #BackendDevelopment #Reliability
-```
-
-Stored variants can be retrieved with:
-
-```bash
-curl -i http://localhost:3000/posts/2/variants
-```
-
-which returned:
-
-```text
-HTTP/1.1 200 OK
-```
+Stored variants can be retrieved through the post variants endpoint.
 
 A request for variants from a nonexistent post:
 
@@ -269,6 +247,8 @@ HTTP/1.1 404 Not Found
   "error": "Post not found"
 }
 ```
+
+This demonstrates that generation uses stored source records and refuses nonexistent post IDs.
 
 ---
 
@@ -384,7 +364,7 @@ HTTP/1.1 200 OK
 reused: true
 ```
 
-and reused the same schedule rather than creating another row.
+and reused the same schedule rather than creating another schedule row.
 
 ### Editing approved content invalidates approval
 
@@ -405,13 +385,7 @@ The variant status returned to:
 draft
 ```
 
-The existing scheduled job was removed:
-
-```json
-{
-  "schedules": []
-}
-```
+The pending SQLite schedule was removed.
 
 Attempting to schedule the edited variant without approving it again returned:
 
@@ -427,7 +401,7 @@ HTTP/1.1 409 Conflict
 }
 ```
 
-This prevents previously approved content from being edited and later published without a new human approval.
+This prevents edited content from being published under an earlier approval.
 
 ---
 
@@ -492,7 +466,7 @@ No publishing, scheduling, review, or campaign business logic was changed.
 
 A Mastodon-platform variant was then published.
 
-Observed publish result:
+Observed result:
 
 ```text
 platform: mastodon
@@ -513,7 +487,7 @@ platform: mastodon
 adapter: mock_x
 ```
 
-This proves that adapter selection is configuration-driven and that changing the destination does not require changing business logic.
+This proves adapter selection is configuration-driven and changing the destination does not require changing business logic.
 
 ---
 
@@ -539,7 +513,7 @@ attempt_number: 2
 result: duplicate_skipped
 ```
 
-Both attempts returned the same external ID.
+Both attempts referenced the same external ID.
 
 Only one matching row existed in `mock_publications`.
 
@@ -574,16 +548,285 @@ The URL stored in the database was also checked locally:
 
 ```text
 hasUrl: true
+urlLength: 50
 endsWithStatusId: true
 ```
 
-Therefore, two publish attempts produced exactly one external Mastodon post.
+Therefore, repeated publish attempts produced exactly one external Mastodon post.
 
 ---
 
 ## 7. Durable Scheduling
 
-Pending — Phase 5.
+Phase 5 uses BullMQ with Redis running in Docker as the durable job store.
+
+SQLite stores application schedule records while BullMQ and Redis provide durable delayed-job execution.
+
+### Redis connection
+
+The Redis container responded successfully:
+
+```bash
+docker exec social-studio-redis redis-cli ping
+```
+
+Observed result:
+
+```text
+PONG
+```
+
+The Node application also successfully connected to Redis:
+
+```bash
+npm run redis:test
+```
+
+Observed result:
+
+```text
+REDIS CONNECTION OK
+{ ping: 'PONG' }
+```
+
+### Redis persistence
+
+Redis persistence was verified by storing a value, restarting the Redis container, and confirming that the value remained available.
+
+```bash
+docker exec social-studio-redis redis-cli SET social-studio-test durable
+```
+
+Result:
+
+```text
+OK
+```
+
+Redis was restarted:
+
+```bash
+docker restart social-studio-redis
+```
+
+The value was then retrieved:
+
+```bash
+docker exec social-studio-redis redis-cli GET social-studio-test
+```
+
+Result:
+
+```text
+durable
+```
+
+This proves the Redis job store survives a container restart.
+
+### Deterministic BullMQ job IDs
+
+BullMQ uses a deterministic job ID based on the schedule ID:
+
+```text
+schedule-<schedule_id>
+```
+
+Queue test:
+
+```bash
+npm run queue:test
+```
+
+Observed result:
+
+```text
+BULLMQ QUEUE OK
+{
+  firstJobId: 'schedule-999999',
+  secondJobId: 'schedule-999999',
+  sameJobId: true
+}
+{
+  storedInRedis: true,
+  scheduleId: 999999
+}
+```
+
+Repeated attempts to enqueue the same schedule therefore resolve to the same BullMQ job ID.
+
+### Schedule reconciliation
+
+The worker reconciles SQLite schedules with Redis when it starts.
+
+Command:
+
+```bash
+npm run reconcile:test
+```
+
+Observed result when no recovery was required:
+
+```text
+RECONCILIATION RESULT
+{ found: 0, queued: 0 }
+
+QUEUE RECOVERY CHECK
+{ recoverableSchedules: 0, missingJobs: [] }
+
+RECONCILIATION OK
+```
+
+Recoverable schedule statuses include:
+
+```text
+scheduled
+processing
+```
+
+This allows a worker restart to restore a missing or interrupted BullMQ job from the SQLite source of truth.
+
+### Automatic real Mastodon scheduling
+
+Mastodon variant 11 was approved and scheduled through the scheduling API.
+
+Schedule response:
+
+```text
+HTTP/1.1 201 Created
+```
+
+```json
+{
+  "ok": true,
+  "reused": false,
+  "schedule": {
+    "id": 5,
+    "variant_id": 11,
+    "status": "scheduled"
+  },
+  "queue": {
+    "job_id": "schedule-5",
+    "status": "queued"
+  }
+}
+```
+
+The manual publish endpoint was not called.
+
+The BullMQ worker automatically processed the scheduled job:
+
+```text
+[worker] Processing job schedule-5 for schedule 5
+[worker] Published schedule 5
+[worker] Job schedule-5 completed
+```
+
+Database verification showed:
+
+```text
+schedule 5 → published
+variant 11 → published
+attempt 1 → success
+adapter → mastodon
+external ID → stored
+external URL → stored
+```
+
+The stored external URL was opened in the browser and the real Mastodon post was confirmed to exist.
+
+The tested flow was:
+
+```text
+approved variant
+→ SQLite schedule
+→ BullMQ delayed job
+→ Redis
+→ worker
+→ publishSchedule()
+→ Mastodon
+→ publish history
+```
+
+### Worker crash and restart recovery
+
+A controlled fault was used with `mock_x` to simulate the dangerous failure window where the external publishing side effect succeeds but the worker exits before the local success transaction is committed.
+
+The crash simulation was enabled with:
+
+```bash
+SIMULATE_CRASH_AFTER_PUBLISH=true npm run worker
+```
+
+The worker processed schedule 6 and intentionally terminated after the mock publisher created its publication:
+
+```text
+[worker] Processing job schedule-6 for schedule 6
+[publish] Simulating worker crash after external publish for schedule 6
+```
+
+Immediately after the crash, the database showed:
+
+```text
+schedule 6 → processing
+attempt 1 → started
+mock publications → exactly 1
+```
+
+The mock publication had the schedule idempotency key:
+
+```text
+variant:9:slot:2026-10-11T02:46:20.953Z
+```
+
+The worker was then restarted normally:
+
+```bash
+npm run worker
+```
+
+Recovery output:
+
+```text
+[worker] Reconciliation complete: 1 recoverable schedule(s), 1 queued
+[worker] Listening on queue "social-publish"
+[worker] Job schedule-6 stalled
+[worker] Processing job schedule-6 for schedule 6
+[worker] Published schedule 6
+[worker] Job schedule-6 completed
+```
+
+Final database state:
+
+```text
+schedule 6 → published
+variant 9 → published
+```
+
+Publish attempts:
+
+```text
+attempt 1
+result → failed
+error → Worker interrupted before attempt completed
+
+attempt 2
+result → success
+```
+
+The successful second attempt reused the same external publication created before the worker crash.
+
+The `mock_publications` table still contained exactly one row for the schedule idempotency key.
+
+Result:
+
+```text
+2 publish attempts
+1 successful finalization
+1 actual publication
+0 duplicate posts
+```
+
+This demonstrates durable scheduling and idempotent recovery across a worker crash.
 
 ---
 
@@ -608,7 +851,9 @@ History records include:
 - error, when present
 - start and finish timestamps
 
-Example idempotent Mastodon history:
+### Normal idempotent retry
+
+Example Mastodon history:
 
 ```text
 attempt 1 → success
@@ -617,23 +862,188 @@ same external ID
 same external URL
 ```
 
-The mock adapter swap was also visible in history:
+### Worker interruption history
+
+The controlled Phase 5 crash test produced:
+
+```text
+attempt 1 → failed
+error → Worker interrupted before attempt completed
+
+attempt 2 → success
+```
+
+Only one corresponding mock publication existed.
+
+### Adapter swap history
+
+The configuration-only adapter swap was also visible in history:
 
 ```text
 platform: mastodon
 adapter: mock_x
 result: success
 ```
+
+This demonstrates that successful, skipped, failed, and recovered publish attempts remain visible.
+
 ---
 
 ## 9. Secrets
 
 `.env` is excluded from Git through `.gitignore`.
 
+The real Mastodon access token exists only in `.env`.
+
 `.env.example` contains only safe placeholder values.
+
+The repository was checked to confirm `.env` is not tracked:
+
+```bash
+git ls-files .env
+```
+
+Observed result:
+
+```text
+(no output)
+```
+
+No access token is included in `EVIDENCE.md`, `README.md`, or committed source files.
 
 ---
 
 ## 10. README / Reproducibility
 
-Pending — finalized during Phase 5.
+The final README documents:
+
+- what Social Media Studio does
+- the complete application architecture
+- project structure
+- prerequisites
+- environment configuration
+- exact installation steps
+- one main application run command
+- sample-data seed command
+- API workflow
+- scheduling and publishing workflow
+- idempotency behavior
+- durable scheduling and reconciliation
+- worker crash/restart testing
+- adapter configuration and swapping
+- test commands
+- acceptance-probe instructions
+- security practices
+- known limitations
+
+### One-command application startup
+
+The project was tested with:
+
+```bash
+npm start
+```
+
+The command starts:
+
+```text
+Redis Docker container
+Express API
+BullMQ publishing worker
+```
+
+Observed startup output:
+
+```text
+Container social-studio-redis Running
+
+[WORKER] [worker] Reconciliation complete: 0 recoverable schedule(s), 0 queued
+[WORKER] [worker] Listening on queue "social-publish"
+
+[API] Social Media Studio API running at http://localhost:3000
+```
+
+This verifies that the application services required for normal operation can be started through one command after installation and environment setup.
+
+### Seed step
+
+With the application running, sample data was created using:
+
+```bash
+npm run seed
+```
+
+Observed output:
+
+```text
+Seeding Social Media Studio through http://localhost:3000
+Created sample post 5
+Generated sample variants
+
+┌─────────┬────┬────────────┬─────────┐
+│ (index) │ id │ platform   │ status  │
+├─────────┼────┼────────────┼─────────┤
+│ 0       │ 12 │ 'x'        │ 'draft' │
+│ 1       │ 13 │ 'linkedin' │ 'draft' │
+│ 2       │ 14 │ 'mastodon' │ 'draft' │
+└─────────┴────┴────────────┴─────────┘
+
+SEED COMPLETE
+```
+
+The seed script uses the public API rather than inserting records directly into SQLite. This exercises the normal ingestion and variant-generation path.
+
+### Reproducible setup
+
+The documented setup for a new clone is:
+
+```bash
+npm install
+cp .env.example .env
+```
+
+After required environment values are configured, the application starts with:
+
+```bash
+npm start
+```
+
+and sample data is created from another terminal with:
+
+```bash
+npm run seed
+```
+
+Windows-specific `.env` copy instructions are also included in the README.
+
+### Reviewer guidance
+
+The README contains a dedicated Acceptance Probe Guide covering:
+
+```text
+Probe 1 → ingest and generate valid variants
+Probe 2 → reject a rule-breaking variant
+Probe 3 → refuse scheduling of an unapproved variant
+Probe 4 → schedule and automatically publish to real Mastodon
+Probe 5 → interrupt and recover a worker with zero duplicate publication
+Probe 6 → swap publisher adapter through configuration only
+```
+
+The README also documents the commands required to inspect publish history and mock publications.
+
+### Known limitations
+
+The README explicitly documents current limitations rather than hiding them, including:
+
+- single-user architecture
+- no authentication or multi-tenancy
+- deterministic template-based generation
+- Mastodon as the only real publisher
+- mock X and LinkedIn publishers
+- Node `node:sqlite` experimental warning
+- seed data accumulating between runs
+- controlled crash hook being test-only
+- Redis availability requirements
+- behavior of a BullMQ job that remains after an approved scheduled variant is edited and its SQLite schedule is invalidated
+
+The completed README therefore provides the architecture, run instructions, seed instructions, testing guidance, acceptance-probe workflow, security guidance, and known limitations required for reproduction and review.

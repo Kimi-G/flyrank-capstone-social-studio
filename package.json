@@ -4,14 +4,20 @@
   "description": "FlyRank Backend Track Capstone.",
   "main": "index.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "node src/app.js",
-    "db:test": "node tests/db.test.js",
-    "variant:test": "node tests/variant-validator.test.js",
-    "constraint:test": "node tests/constraint-gate.test.js",
-    "publisher:test": "node tests/publisher-adapter.test.js",
-    "mastodon:auth": "node tests/mastodon-auth.test.js"
-  },
+  "start": "docker compose up -d redis && concurrently -k -n API,WORKER \"npm run api\" \"npm run worker\"",
+  "api": "node src/app.js",
+  "dev": "node src/app.js",
+  "worker": "node src/jobs/publishWorker.js",
+  "seed": "node scripts/seed.js",
+  "db:test": "node tests/db.test.js",
+  "variant:test": "node tests/variant-validator.test.js",
+  "constraint:test": "node tests/constraint-gate.test.js",
+  "publisher:test": "node tests/publisher-adapter.test.js",
+  "mastodon:auth": "node tests/mastodon-auth.test.js",
+  "redis:test": "node tests/redis.test.js",
+  "queue:test": "node tests/queue.test.js",
+  "reconcile:test": "node tests/reconcile.test.js"
+},
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Kimi-G/flyrank-capstone-social-studio.git"
@@ -24,8 +30,13 @@
   },
   "homepage": "https://github.com/Kimi-G/flyrank-capstone-social-studio#readme",
   "dependencies": {
+    "bullmq": "^6.3.12",
     "cheerio": "^1.2.0",
     "dotenv": "^18.0.6",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }
